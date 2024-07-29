@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.mpp": "cpp",
+        "chrono": "cpp",
+        "xlocale": "cpp"
+    }
+}

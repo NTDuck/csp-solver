@@ -1,38 +1,168 @@
-#include <cctype>
-#include <cstddef>
 #include <cstdint>
 
-#include <tuple>
+#include <algorithm>
 
 #include <iostream>
+
+#include <string_view>
 
 #include <array>
 
 
-namespace aux::details {
-    /**
-     * @brief Calculate binomial coefficient.
-     * 
-     * @see https://stackoverflow.com/questions/44718971/calculate-binomial-coffeficient-very-reliably
-     */
+namespace ext::details {
+    template <typename T, std::size_t N>
+    class static_vector {
+        std::size_t mSize;
+        std::array<T, N> mContainer;
+
+    public:
+        using value_type = typename std::array<T, N>::value_type;
+        using size_type = typename std::array<T, N>::size_type;
+        using difference_type = typename std::array<T, N>::difference_type;
+
+        using reference = typename std::array<T, N>::reference;
+        using const_reference = typename std::array<T, N>::const_reference;
+        using pointer = typename std::array<T, N>::pointer;
+        using const_pointer = typename std::array<T, N>::const_pointer;
+
+        using iterator = typename std::array<T, N>::iterator;
+        using const_iterator = typename std::array<T, N>::const_iterator;
+        using reverse_iterator = typename std::array<T, N>::reverse_iterator;
+        using const_reverse_iterator = typename std::array<T, N>::const_reverse_iterator;
+
+        constexpr reference at(size_type pos) {
+            if (pos < 0 || pos > mSize - 1)
+                throw(std::out_of_range("Index out of range"));
+
+            return operator[](pos);
+        }
+
+        constexpr const_reference at(size_type pos) const {
+            if (pos < 0 || pos > mSize - 1)
+                throw(std::out_of_range("Index out of range"));
+
+            return operator[](pos);
+        }
+
+        constexpr reference operator[](size_type pos) {
+            return mContainer.operator[](pos);
+        }
+
+        constexpr const_reference operator[](size_type pos) const {
+            return mContainer.operator[](pos);
+        }
+
+        constexpr reference front() {
+            return *begin();
+        }
+
+        constexpr const_reference front() const {
+            return *begin();
+        }
+
+        constexpr reference back() {
+            return *std::prev(end());
+        }
+
+        constexpr const_reference back() const {
+            return *std::prev(end());
+        }
+
+        constexpr iterator begin() noexcept {
+            return mContainer.begin();
+        }
+
+        constexpr const_iterator begin() const noexcept {
+            return mContainer.begin();
+        }
+
+        constexpr const_iterator cbegin() const noexcept {
+            return mContainer.cbegin();
+        }
+
+        constexpr iterator end() noexcept {
+            auto it = begin();
+            std::advance(it, mSize);
+            return it;
+        }
+
+        constexpr const_iterator end() const noexcept {
+            auto it = begin();
+            std::advance(it, mSize);
+            return it;
+        }
+
+        constexpr const_iterator cend() const noexcept {
+            auto it = cbegin();
+            std::advance(it, mSize);
+            return it;
+        }
+
+        constexpr reverse_iterator rbegin() noexcept {
+            auto it = mContainer.rbegin();
+            std::advance(it, N - mSize);
+            return it;
+        }
+
+        constexpr const_reverse_iterator rbegin() const noexcept {
+            auto it = mContainer.rbegin();
+            std::advance(it, N - mSize);
+            return it;
+        }
+
+        constexpr const_reverse_iterator crbegin() const noexcept {
+            auto it = mContainer.crbegin();
+            std::advance(it, N - mSize);
+            return it;
+        }
+
+        constexpr reverse_iterator rend() noexcept {
+            return mContainer.rend();
+        }
+
+        constexpr const_reverse_iterator rend() const noexcept {
+            return mContainer.rend();
+        }
+
+        constexpr const_reverse_iterator crend() const noexcept {
+            return mContainer.crend();
+        }
+
+        constexpr bool empty() const noexcept {
+            return size() != 0;
+        }
+
+        constexpr size_type size() const noexcept {
+            return mSize;
+        }
+
+        constexpr size_type max_size() const noexcept {
+            return mContainer.max_size();
+        }
+
+        constexpr size_type capacity() const noexcept {
+            return mContainer.size();
+        }
+
+        constexpr void clear() {
+            mSize = 0;
+        }
+
+        constexpr void push_back(const_reference value) {
+            mContainer[mSize++] = value;
+        }
+
+        constexpr void pop_back() noexcept {
+            --mSize;
+        }
+
+        constexpr void resize(size_type count) {
+            mSize = count;
+        }
+    };
+
     template <typename T = std::uint64_t, typename U>
-    constexpr T GetBinomialCoefficient(U n, U k) noexcept {
-        if (k > n)
-            return 0;
-
-        if (k == 0 || k == n)
-            return 1;
-
-        if (k == 1 || k == n - 1)
-            return n;
-
-        return k << 1 > n
-            ? (GetBinomialCoefficient(n - 1, k) * n / (n - k))
-            : (GetBinomialCoefficient(n - 1, k - 1) * n) / k;
-    }
-
-    template <typename T = std::uint64_t, typename U>
-    constexpr T GetPower(U base, U power) {
+    constexpr T pow(U base, U power) {
         switch (power) {
             case 0:
                 return 1;
@@ -44,246 +174,272 @@ namespace aux::details {
                 break;
         }
 
-        U sq = GetPower(base, power >> 1);
+        U recurse = pow(base, power >> 1);
         return power & 1
-            ? (sq * sq * base)
-            : (sq * sq);
+            ? (recurse * recurse * base)
+            : (recurse * recurse);
     }
 
     template <typename T, std::size_t N>
-    struct GetFilledArray {
-        constexpr std::array<T, N> operator()(T value) {
-            return impl(value, std::make_index_sequence<N>{});
+    struct make_array {
+        constexpr std::array<T, N> operator()(T val) const {
+            return fill(val, std::make_index_sequence<N>{});
+        }
+
+        constexpr std::array<T, N> operator()(std::basic_string_view<T> sv) const {
+            std::array<T, N> arr{};
+            auto size = std::min(sv.size(), arr.size());
+
+            for (auto pos = 0; pos < size; ++pos)
+                arr[pos] = sv[pos];
+
+            return arr;
         }
 
     private:
         template <std::size_t... Is>
-        static constexpr std::array<T, N> impl(T value, std::index_sequence<Is...>) {
-            return { ((void)Is, value)... };
-        }
-    };
-
-    template <typename T, std::size_t N>
-    struct ArrayProxy {
-        constexpr void push_back(T const& value) {
-            mData[mSize++] = value;
-        }
-
-        constexpr void pop_back() {
-            --mSize;
-        }
-
-        constexpr auto to_array() const noexcept {
-            return mData;
-        }
-
-        constexpr std::size_t size() const noexcept {
-            return mSize;
-        }
-
-    private:
-        std::array<T, N> mData{};
-        std::size_t mSize{};
-    };
-
-    template <typename T, std::size_t N, std::size_t K>
-    class Permutation {
-    public:
-        static constexpr std::size_t size() noexcept {
-            return GetBinomialCoefficient(N, K);
-        }
-
-        static constexpr auto Generate() {
-            ArrayProxy<std::array<T, K>, size()> resultProxy;
-            ArrayProxy<T, K> currProxy;
-
-            GenerateImpl(resultProxy, currProxy);
-
-            return resultProxy.to_array();
-        }
-
-    private:
-        static constexpr void GenerateImpl(
-            ArrayProxy<std::array<T, K>, size()>& resultProxy,
-            ArrayProxy<T, K>& currProxy, std::size_t begin = 0
-        ) {
-            if (currProxy.size() == K) {
-                resultProxy.push_back(currProxy.to_array());
-                return;
-            }
-
-            for (auto i = begin; i < N; ++i) {
-                currProxy.push_back(i);
-                GenerateImpl(resultProxy, currProxy, i + 1);
-                currProxy.pop_back();
-            }
+        static constexpr std::array<T, N> fill(T val, std::index_sequence<Is...>) {
+            return { ((void)Is, val)... };
         }
     };
 }
 
 
-namespace aux {
-    using Digit = std::uint8_t;
-    static constexpr Digit kAnonDigit = '*';
+namespace ext {
+    template <typename T, std::size_t N>
+    class Combination {
+        std::array<T, N> mDigits;
 
-    template <std::size_t N>
-    struct Combination {
-        constexpr Combination(std::array<Digit, N>&& digits)
-            : mDigits{ std::move(digits) } {}
+    public:
+        using value_type = typename std::array<T, N>::value_type;
+        using size_type = typename std::array<T, N>::size_type;
+        using difference_type = typename std::array<T, N>::difference_type;
 
-        constexpr Combination(Digit&& digit = '0')
-            : mDigits{ details::GetFilledArray<Digit, N>{}(digit) } {}
+        using reference = typename std::array<T, N>::reference;
+        using const_reference = typename std::array<T, N>::const_reference;
+        using pointer = typename std::array<T, N>::pointer;
+        using const_pointer = typename std::array<T, N>::const_pointer;
 
-        friend constexpr bool operator==(Combination const& lhs, Combination const& rhs) {
-            for (auto I = 0; I < N; ++I) {
-                if (lhs.mDigits[I] == kAnonDigit)
-                    continue;
+        using iterator = typename std::array<T, N>::iterator;
+        using const_iterator = typename std::array<T, N>::const_iterator;
+        using reverse_iterator = typename std::array<T, N>::reverse_iterator;
+        using const_reverse_iterator = typename std::array<T, N>::const_reverse_iterator;
 
-                if (rhs.mDigits[I] == kAnonDigit)
-                    continue;
+        constexpr Combination() = default;
 
-                if (lhs.mDigits[I] != rhs.mDigits[I])
-                    return false;
-            }
+        constexpr Combination(std::array<T, N> digits)
+            : mDigits(digits) {}
 
-            return true;
+        constexpr Combination(T digit)
+            : mDigits(details::make_array<T, N>{}(digit)) {}
+
+        constexpr Combination(std::basic_string_view<T> digits)
+            : mDigits(details::make_array<T, N>{}(digits)) {}
+
+        constexpr reference at(size_type pos) {
+            return mDigits.at(pos);
         }
 
-        constexpr Digit& operator[](std::size_t index) {
-            return mDigits[index];
+        constexpr const_reference at(size_type pos) const {
+            return mDigits.at(pos);
         }
 
-        constexpr bool Unanonymous() const {
-            for (const auto digit : mDigits)
-                if (digit == kAnonDigit)
-                    return false;
-
-            return true;
+        constexpr reference operator[](size_type pos) {
+            return mDigits.operator[](pos);
         }
 
-        template <std::size_t K>
-        constexpr Combination Anonymize(std::array<std::size_t, K> indices) const {
-            Combination combination = *this;
-
-            for (const auto index : indices)
-                combination[index] = kAnonDigit;
-
-            return combination;
+        constexpr const_reference operator[](size_type pos) const {
+            return mDigits.operator[](pos);
         }
 
-        constexpr Combination Anonymize(std::size_t index) const {
-            return Anonymize({ index });
-        }
-        
-        constexpr Combination& operator++() {
-            for (int I = N - 1; I >= 0; --I) {
-                if (mDigits[I] == kAnonDigit)
-                    continue;
-
-                if (mDigits[I] == '9')
-                    mDigits[I] = '0';
-                else {
-                    ++mDigits[I];
-                    break;
-                }
-            }
-            
-            return *this;
+        constexpr reference front() {
+            return *begin();
         }
 
-        constexpr Combination operator++(int) {
-            Combination prev = *this;
-            operator++();
-            return prev;
+        constexpr const_reference front() const {
+            return *begin();
         }
 
-        friend std::ostream& operator<<(std::ostream& os, Combination const& combination) {
-            for (auto digit : combination.mDigits)
+        constexpr reference back() {
+            return *std::prev(end());
+        }
+
+        constexpr const_reference back() const {
+            return *std::prev(end());
+        }
+
+        constexpr iterator begin() noexcept {
+            return mDigits.begin();
+        }
+
+        constexpr const_iterator begin() const noexcept {
+            return mDigits.begin();
+        }
+
+        constexpr const_iterator cbegin() const noexcept {
+            return mDigits.cbegin();
+        }
+
+        constexpr iterator end() noexcept {
+            return mDigits.end();
+        }
+
+        constexpr const_iterator end() const noexcept {
+            return mDigits.end();
+        }
+
+        constexpr const_iterator cend() const noexcept {
+            return mDigits.cend();
+        }
+
+        constexpr reverse_iterator rbegin() noexcept {
+            return mDigits.rbegin();
+        }
+
+        constexpr const_reverse_iterator rbegin() const noexcept {
+            return mDigits.rbegin();
+        }
+
+        constexpr const_reverse_iterator crbegin() const noexcept {
+            return mDigits.crbegin();
+        }
+
+        constexpr reverse_iterator rend() noexcept {
+            return mDigits.rend();
+        }
+
+        constexpr const_reverse_iterator rend() const noexcept {
+            return mDigits.rend();
+        }
+
+        constexpr const_reverse_iterator crend() const noexcept {
+            return mDigits.crend();
+        }
+
+        constexpr bool empty() const noexcept {
+            return size() != 0;
+        }
+
+        constexpr size_type size() const noexcept {
+            return mDigits.size();
+        }
+
+        constexpr size_type max_size() const noexcept {
+            return mDigits.max_size();
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, Combination const& c) {
+            for (auto const digit : c.mDigits)
                 os << digit;
 
             return os;
         }
-    
-    private:
-        // template<std::size_t... Is>
-        // friend constexpr bool equal_to_impl(Combination& lhs, Combination const& rhs, std::index_sequence<Is...>) {
-        //     return ((lhs[Is] == kAnonDigit || rhs[Is] == kAnonDigit || lhs[Is] == rhs[Is]) && ...);
-        // }
 
-        std::array<Digit, N> mDigits;
+        constexpr bool operator==(Combination const& other) {
+            for (auto it = cbegin(), otherIt = other.cbegin(); it != cend() && otherIt != other.cend(); ++it, ++otherIt)
+                if (*it != *otherIt)
+                    return false;
+        
+            return true;
+        }
+
+        constexpr bool operator!=(Combination const& other) {
+            return !operator==(other);
+        }
+
+        constexpr Combination& operator++() {
+            for (auto it = rbegin(); it != rend(); ++it) {
+                if (*it == '9')
+                    *it = '0';
+                else {
+                    ++*it;
+                    break;
+                }
+            }
+
+            return *this;
+        }
+
+        constexpr Combination operator++(int) {
+            Combination old = *this;
+            operator++();
+            return old;
+        }
+
+        static constexpr bool isValid(T digit) noexcept {
+            return '0' <= digit && digit <= '9';
+        }
+
+        constexpr bool isValid() const noexcept {
+            for (auto const digit : mDigits)
+                if (!isValid(digit))
+                    return false;
+
+            return true;
+        }
     };
 
-    template <std::size_t N, std::size_t K, bool V_, bool P_>
-    struct Constraint {
-        constexpr Constraint(Combination<N> const& combination)
+    template <std::size_t I, bool Val, bool Pos, typename T, std::size_t N>
+    class Constraint {
+        Combination<T, N> mCombination;
+
+    public:
+        constexpr Constraint(Combination<T, N> const& combination)
             : mCombination(combination) {}
 
-        /**
-         * @see https://stackoverflow.com/questions/12991758/creating-all-possible-k-combinations-of-n-items-in-c
-         */
-        template <bool V = V_, bool P = P_>
-        constexpr std::enable_if_t<V && P, bool> Match(Combination<N> const& combination) const {
-            constexpr auto permutations = details::Permutation<std::size_t, N, K>::Generate();
-            for (auto const& indices : permutations)
-                if (mCombination.Anonymize(indices) == combination)
-                    return true;
+        template <bool Val_ = Val, bool Pos_ = Pos>
+        constexpr std::enable_if_t<Val_ && Pos_, bool> Match(Combination<T, N> combination) const noexcept {
+            std::size_t count = 0;
 
-            return false;
+            for (auto it = mCombination.cbegin(), otherIt = combination.cbegin(); it != mCombination.cend() && otherIt != combination.cend(); ++it, ++otherIt)
+                if (*it == *otherIt)
+                    ++count;
+
+            return count == I;
+        }
+    
+        template <bool Val_ = Val, bool Pos_ = Pos>
+        constexpr std::enable_if_t<Val_ && !Pos_, bool> Match(Combination<T, N> combination) const {
+            return true;
         }
 
-    private:
-        const Combination<N> mCombination;
+        template <bool Val_ = Val, bool Pos_ = Pos>
+        constexpr std::enable_if_t<!Val_ && !Pos_, bool> Match(Combination<T, N> combination) const {
+            return true;
+        }
     };
 
-    template <std::size_t N, typename... Constraints>
+    template <typename T, std::size_t N>
     class Solution {
     public:
-        constexpr Solution(Constraints... constraints)
-            : mConstraints{ constraints... } {}
+        template <typename... Constraints>
+        static constexpr auto Generate(Constraints const&... constraints) {
+            details::static_vector<Combination<T, N>, details::pow(std::size_t(10), N)> result{};
 
-        static constexpr std::size_t max_size() noexcept {
-            return details::GetPower(std::size_t(10), N);
-        }
-
-        constexpr auto Generate() const {
-            details::ArrayProxy<Combination<N>, max_size()> result;
-            Combination<N> combination { '0' };
-
-            auto count = max_size();
-            while (count--)
-                if (MatchAllConstraints(combination++))
+            for (Combination<T, N> combination { '0' }; combination != Combination<T, N> { '9' }; ++combination)
+                if ((constraints.Match(combination) && ...))
                     result.push_back(combination);
 
             return result;
         }
 
     private:
-        std::tuple<Constraints...> mConstraints;
-
-        constexpr bool MatchAllConstraints(Combination<N> const& combination) const {
-            return std::apply([&](const auto&... constraints) {
-                return (constraints.Match(combination) && ...);
-            }, mConstraints);
+        template <typename... Constraints>
+        static constexpr bool Match(Combination<T, N> const& combination, Constraints const&... constraints) {
+            return (constraints.Match(combination) && ...);
         }
     };
 }
 
 
-extern "C" auto main(int argc, char* argv[]) -> std::int32_t {  
-    using namespace aux;
+int main(void) {
+    constexpr ext::Combination<char, 4> comb { "2005" };
+    constexpr ext::Constraint<2, true, true, char, 4> cons {{ "2145" }};
+    constexpr ext::Constraint<1, true, true, char, 4> cons2 {{ "2123" }};
+    constexpr ext::Constraint<1, true, true, char, 4> cons3 {{ "9704" }};
+    constexpr ext::Constraint<2, true, true, char, 4> cons4 {{ "3009" }};
 
-    constexpr Constraint<3, 2, true, true> constraint {
-        {{ '1', '4', '7' }}
-    };
-
-    constexpr auto solution = Solution<3, decltype(constraint)> { constraint };
-
-    constexpr auto resultProxy = solution.Generate();
-    constexpr auto result = resultProxy.to_array();
-    constexpr auto size = resultProxy.size();
-
-    for (auto i = 0; i < size; ++i)
-        std::cout << result[i] << ' ';
-
-    return 0;
+    constexpr auto solution = ext::Solution<char, 4>::Generate(cons, cons2, cons3, cons4);
+    for (auto comb : solution)
+        std::cout << comb << ' ';
 }
