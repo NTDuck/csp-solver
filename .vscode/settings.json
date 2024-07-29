@@ -2,6 +2,7 @@
     "files.associations": {
         "*.mpp": "cpp",
         "chrono": "cpp",
-        "xlocale": "cpp"
+        "xlocale": "cpp",
+        "xtr1common": "cpp"
     }
 }

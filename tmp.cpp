@@ -1,6 +1,5 @@
 #include <cstdint>
 
-#include <algorithm>
 #include <iostream>
 
 #include <string_view>
@@ -377,40 +376,40 @@ namespace ext {
         }
     };
 
-    enum class MatchCondition : std::uint8_t {
+    enum class MatchCondition {
         kCorrectValCorrectPos,
         kCorrectValWrongPos,
         kWrongValWrongPos,
     };
 
-    template <std::size_t I, MatchCondition Cond, typename T, std::size_t N>
+    template <typename T, std::size_t N>
     class Constraint {
         Combination<T, N> mCombination;
+        std::size_t mCount;
+        MatchCondition mMatchCondition;
 
     public:
         constexpr Constraint(Combination<T, N> const& combination)
             : mCombination(combination) {}
 
-        template <MatchCondition Cond_ = Cond, std::size_t I_ = I>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValCorrectPos, bool> Match(Combination<T, N> const& combination) const noexcept {
+        constexpr std::enable_if_t<Val_ && Pos_, bool> Match(Combination<T, N> combination) const noexcept {
             std::size_t count = 0;
 
             for (auto it = mCombination.cbegin(), otherIt = combination.cbegin(); it != mCombination.cend() && otherIt != combination.cend(); ++it, ++otherIt)
                 if (*it == *otherIt)
                     ++count;
 
-            return count == I_;
+            return count == I;
         }
     
-        template <MatchCondition Cond_ = Cond>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValWrongPos, bool> Match(Combination<T, N> const& combination) const {
+        template <bool Val_ = Val, bool Pos_ = Pos>
+        constexpr std::enable_if_t<Val_ && !Pos_, bool> Match(Combination<T, N> combination) const {
             return true;
         }
 
-        template <MatchCondition Cond_ = Cond>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kWrongValWrongPos, bool> Match(Combination<T, N> const& combination) const noexcept {
-            static_assert(I < N);
-            return Match<MatchCondition::kCorrectValCorrectPos, N - I>(combination);
+        template <bool Val_ = Val, bool Pos_ = Pos>
+        constexpr std::enable_if_t<!Val_ && !Pos_, bool> Match(Combination<T, N> combination) const {
+            return true;
         }
     };
 
@@ -438,13 +437,13 @@ namespace ext {
 
 
 int main(void) {
-    constexpr auto solution = ext::Solution<char, 4>::Generate(
-        ext::Constraint<2, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "2145" }},
-        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "2123" }},
-        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "9704" }},
-        ext::Constraint<2, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "3009" }}
-    );
+    constexpr ext::Combination<char, 4> comb { "2005" };
+    constexpr ext::Constraint<2, true, true, char, 4> cons {{ "2145" }};
+    constexpr ext::Constraint<1, true, true, char, 4> cons2 {{ "2123" }};
+    constexpr ext::Constraint<1, true, true, char, 4> cons3 {{ "9704" }};
+    constexpr ext::Constraint<2, true, true, char, 4> cons4 {{ "3009" }};
 
-    for (auto combination : solution)
-        std::cout << combination << ' ';
+    constexpr auto solution = ext::Solution<char, 4>::Generate(cons, cons2, cons3, cons4);
+    for (auto comb : solution)
+        std::cout << comb << ' ';
 }
