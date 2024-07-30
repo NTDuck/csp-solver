@@ -160,6 +160,10 @@ namespace ext::details {
         }
     };
 
+    /**
+     * @note Time complexity: `O(log(power))`
+     * @note Auxiliary space: `O(log(power))`
+     */
     template <typename T = std::uint64_t, typename U>
     constexpr T pow(U base, U power) {
         switch (power) {
@@ -394,6 +398,10 @@ namespace ext {
             static_assert(I <= N);
         }
 
+        /**
+         * @note Time complexity: `O(N)`
+         * @note Auxiliary space: `O(1)`
+         */
         template <MatchCondition Cond_ = Cond, std::size_t I_ = I>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValCorrectPos, bool> Match(Combination<T, N> const& combination) const noexcept {
             std::size_t count = 0;
@@ -404,7 +412,11 @@ namespace ext {
 
             return count == I_;
         }
-    
+
+        /**
+         * @note Time complexity: `O(N)`
+         * @note Auxiliary space: `O(N)`
+         */
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValWrongPos, bool> Match(Combination<T, N> const& combination) const {
             auto make_table = [](Combination<T, N> const& combination) {
@@ -439,64 +451,119 @@ namespace ext {
             return count == I;
         }
 
+        /**
+         * @note Time complexity: `O(N)`
+         * @note Auxiliary space: `O(1)`
+         */
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kWrongValWrongPos, bool> Match(Combination<T, N> const& combination) const noexcept {
             return Match<MatchCondition::kCorrectValCorrectPos, N - I>(combination);
         }
+    
+        friend std::ostream& operator<<(std::ostream& os, Constraint const& constraint) {
+            auto stringifyMatchCondition = [&]() -> std::string_view {
+                switch (Cond) {
+                    case MatchCondition::kCorrectValCorrectPos:
+                        return I > 1
+                            ? "digits are correct and correctly placed"
+                            : "digit is correct and correctly placed";
+
+                    case MatchCondition::kCorrectValWrongPos:
+                        return I > 1
+                            ? "digits are correct but incorrectly placed"
+                            : "digit is correct but incorrectly placed";
+
+                    case MatchCondition::kWrongValWrongPos:
+                        return I > 1
+                            ? "digits are incorrect (value-wise and position-wise)"
+                            : "digit is incorrect (value-wise and position-wise)";
+
+                    default:
+                        return {};
+                }
+            };
+
+            return os << constraint.mCombination << ": " << I << ' ' << stringifyMatchCondition() << '.';
+        }
     };
 
-    template <typename T, std::size_t N>
+    template <typename T, std::size_t N, typename... Constraints>
     class Solution {
+        std::tuple<Constraints...> mConstraints;
+
+        template <typename Clock = std::chrono::high_resolution_clock, typename Duration = std::chrono::microseconds>
+        auto getDeltaTime() const {
+            static auto begin = Clock::now();
+            auto end = Clock::now();
+            
+            auto dt = end - begin;
+            begin = end;
+
+            return std::chrono::duration_cast<Duration>(dt).count();
+        }
+
     public:
-        template <typename... Constraints>
-        static constexpr auto Generate(Constraints const&... constraints) {
+        constexpr Solution(Constraints&&... constraints)
+            : mConstraints(std::forward<Constraints>(constraints)...) {}
+
+        constexpr auto Generate() const {
             details::static_vector<Combination<T, N>, details::pow(std::size_t(10), N)> result{};
 
             for (Combination<T, N> combination { '0' }; combination != Combination<T, N> { '9' }; ++combination)
-                if ((constraints.Match(combination) && ...))
+                if (std::apply([combination](Constraints const&... constraints) {
+                    return ((constraints.Match(combination) && ...));
+                }, mConstraints))
                     result.push_back(combination);
 
             return result;
         }
 
-    private:
-        template <typename... Constraints>
-        static constexpr bool Match(Combination<T, N> const& combination, Constraints const&... constraints) {
-            return (constraints.Match(combination) && ...);
+        void Print(details::static_vector<Combination<T, N>, details::pow(std::size_t(10), N)> combinations, std::ostream& os = std::cout, std::string_view delimiter = " ") const {
+            getDeltaTime();
+
+            os << "With " << sizeof...(Constraints) << (sizeof...(Constraints) > 1 ? " constraints" : " constraint") << ":" << std::endl;
+            std::apply([&os](Constraints... constraints) {
+                std::size_t idx{};
+                ((os << '(' << ++idx << ") " << constraints << std::endl), ...);
+            }, mConstraints);
+            
+            os << "Found " << combinations.size() << " matching combinations:" << std::endl;
+            for (auto combination : combinations)
+                os << combination << delimiter;
+            os << std::endl;
+
+            auto dt = getDeltaTime();
+            os << "(generated within compile-time, printed in " << dt << "ms)" << std::endl;
         }
     };
+
+    template <typename T, std::size_t N, typename... Constraints>
+    static constexpr auto CreateSolution(Constraints&&... constraints) {
+        return Solution<T, N, Constraints...>(std::forward<Constraints>(constraints)...);
+    }
 }
 
 
-template <typename Clock = std::chrono::high_resolution_clock, typename Duration = std::chrono::microseconds>
-static auto dt() {
-    static auto begin = Clock::now();
-    auto end = Clock::now();
-    
-    auto dt = end - begin;
-    begin = end;
+/* Modify this section for length (the number of digits) */
+static constexpr std::size_t N = 3;
 
-    return std::chrono::duration_cast<Duration>(dt).count();
-}
+template <std::size_t I, ext::MatchCondition Cond>
+using Constraint = ext::Constraint<I, Cond, char, N>;
 
 
 int main(void) {
-    dt();
-
-    constexpr auto solution = ext::Solution<char, 3>::Generate(
-        ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "147" }},
-        ext::Constraint<1, ext::MatchCondition::kCorrectValCorrectPos, char, 3> {{ "189" }},
-        ext::Constraint<2, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "964" }},
-        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos,     char, 3> {{ "523" }},
-        ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "286" }}
+    constexpr auto solution = ext::CreateSolution<char, N> (
+        /* Modify this section for constraints */
+        /* `Constraint<I, Cond> {{ "Comb" }}` means for combination `Comb`, `I` digit(s) are `Cond` */
+        /* For example, the first constraint (described by the one right below) means for combination "682", 1 digit is correct and correctly placed */
+        Constraint<1, ext::MatchCondition::kCorrectValCorrectPos> {{ "682" }},
+        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "614" }},
+        Constraint<2, ext::MatchCondition::kCorrectValWrongPos> {{ "206" }},
+        Constraint<3, ext::MatchCondition::kWrongValWrongPos> {{ "738" }},
+        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "780" }}
     );
-    auto generation_time = dt();
 
-    std::cout << "Found " << solution.size() << " matching combinations:" << std::endl;
-    for (auto combination : solution)
-        std::cout << combination << ' ';
-    std::cout << std::endl;
-    auto print_time = dt();
-
-    std::cout << "(generated in " << generation_time << "ms, printed in " << print_time << "ms)" << std::endl;
+    /* Ignore intellisense's "expression not folded to a constant due to excessive constexpr function call complexity" */
+    constexpr auto generation = solution.Generate();
+    solution.Print(generation);
 }
