@@ -1,12 +1,11 @@
 #include <cstdint>
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 
 #include <string_view>
-
 #include <array>
-#include <bitset>
 
 
 namespace ext::details {
@@ -469,7 +468,21 @@ namespace ext {
 }
 
 
+template <typename Clock = std::chrono::high_resolution_clock, typename Duration = std::chrono::microseconds>
+static auto dt() {
+    static auto begin = Clock::now();
+    auto end = Clock::now();
+    
+    auto dt = end - begin;
+    begin = end;
+
+    return std::chrono::duration_cast<Duration>(dt).count();
+}
+
+
 int main(void) {
+    dt();
+
     constexpr auto solution = ext::Solution<char, 3>::Generate(
         ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "147" }},
         ext::Constraint<1, ext::MatchCondition::kCorrectValCorrectPos, char, 3> {{ "189" }},
@@ -477,7 +490,13 @@ int main(void) {
         ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos,     char, 3> {{ "523" }},
         ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "286" }}
     );
+    auto generation_time = dt();
 
+    std::cout << "Found " << solution.size() << " matching combinations:" << std::endl;
     for (auto combination : solution)
         std::cout << combination << ' ';
+    std::cout << std::endl;
+    auto print_time = dt();
+
+    std::cout << "(generated in " << generation_time << "ms, printed in " << print_time << "ms)" << std::endl;
 }
