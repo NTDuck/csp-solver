@@ -4,7 +4,9 @@
 #include <iostream>
 
 #include <string_view>
+
 #include <array>
+#include <bitset>
 
 
 namespace ext::details {
@@ -389,7 +391,9 @@ namespace ext {
 
     public:
         constexpr Constraint(Combination<T, N> const& combination)
-            : mCombination(combination) {}
+            : mCombination(combination) {
+            static_assert(I <= N);
+        }
 
         template <MatchCondition Cond_ = Cond, std::size_t I_ = I>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValCorrectPos, bool> Match(Combination<T, N> const& combination) const noexcept {
@@ -404,12 +408,40 @@ namespace ext {
     
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValWrongPos, bool> Match(Combination<T, N> const& combination) const {
-            return true;
+            auto make_table = [](Combination<T, N> const& combination) {
+                std::array<std::array<bool, N>, '9' - '0' + 1> table{};
+
+                for (auto& arr : table)
+                    for (auto& elem : arr)
+                        elem = false;
+                
+                for (auto pos = 0; pos < combination.size(); ++pos)
+                    table[combination[pos] - '0'][pos] = true;
+
+                return table;
+            };
+
+            auto table = make_table(mCombination);
+            auto otherTable = make_table(combination);
+
+            std::size_t count = 0;
+            std::size_t internalCount{};
+
+            for (auto idx = 0; idx < table.size(); ++idx) {
+                internalCount = 0;
+
+                for (auto pos = 0; pos < N; ++pos)
+                    if (table[idx][pos] != otherTable[idx][pos])
+                        ++internalCount;
+
+                count += internalCount >> 1;
+            }
+
+            return count == I;
         }
 
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kWrongValWrongPos, bool> Match(Combination<T, N> const& combination) const noexcept {
-            static_assert(I < N);
             return Match<MatchCondition::kCorrectValCorrectPos, N - I>(combination);
         }
     };
@@ -438,11 +470,12 @@ namespace ext {
 
 
 int main(void) {
-    constexpr auto solution = ext::Solution<char, 4>::Generate(
-        ext::Constraint<2, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "2145" }},
-        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "2123" }},
-        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "9704" }},
-        ext::Constraint<2, ext::MatchCondition::kWrongValWrongPos, char, 4> {{ "3009" }}
+    constexpr auto solution = ext::Solution<char, 3>::Generate(
+        ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "147" }},
+        ext::Constraint<1, ext::MatchCondition::kCorrectValCorrectPos, char, 3> {{ "189" }},
+        ext::Constraint<2, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "964" }},
+        ext::Constraint<3, ext::MatchCondition::kWrongValWrongPos,     char, 3> {{ "523" }},
+        ext::Constraint<1, ext::MatchCondition::kCorrectValWrongPos,   char, 3> {{ "286" }}
     );
 
     for (auto combination : solution)
