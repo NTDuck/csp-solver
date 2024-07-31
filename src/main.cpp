@@ -402,7 +402,7 @@ namespace ext {
          * @note Time complexity: `O(N)`
          * @note Auxiliary space: `O(1)`
          */
-        template <MatchCondition Cond_ = Cond, std::size_t I_ = I>
+        template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValCorrectPos, bool> Match(Combination<T, N> const& combination) const noexcept {
             std::size_t count = 0;
 
@@ -410,7 +410,7 @@ namespace ext {
                 if (*it == *otherIt)
                     ++count;
 
-            return count == I_;
+            return count == I;
         }
 
         /**
@@ -420,14 +420,14 @@ namespace ext {
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValWrongPos, bool> Match(Combination<T, N> const& combination) const {
             auto make_table = [](Combination<T, N> const& combination) {
-                std::array<std::array<bool, N>, '9' - '0' + 1> table{};
+                std::array<std::array<bool, N + 1>, 10> table{}; /* index N indicates whether combination has digit */
 
                 for (auto& arr : table)
                     for (auto& elem : arr)
                         elem = false;
                 
                 for (auto pos = 0; pos < combination.size(); ++pos)
-                    table[combination[pos] - '0'][pos] = true;
+                    table[combination[pos] - '0'][pos] = table[combination[pos] - '0'][N] = true;
 
                 return table;
             };
@@ -439,6 +439,9 @@ namespace ext {
             std::size_t internalCount{};
 
             for (auto idx = 0; idx < table.size(); ++idx) {
+                if (!table[idx][N] || !otherTable[idx][N])
+                    continue;
+
                 internalCount = 0;
 
                 for (auto pos = 0; pos < N; ++pos)
@@ -457,7 +460,28 @@ namespace ext {
          */
         template <MatchCondition Cond_ = Cond>
         constexpr std::enable_if_t<Cond_ == MatchCondition::kWrongValWrongPos, bool> Match(Combination<T, N> const& combination) const noexcept {
-            return Match<MatchCondition::kCorrectValCorrectPos, N - I>(combination);
+            auto make_table = [](Combination<T, N> const& combination) {
+                std::array<bool, 10> table{};
+
+                for (auto& elem : table)
+                    elem = false;
+
+                for (auto const digit : combination)
+                    table[digit - '0'] = true;
+
+                return table;
+            };
+
+            auto table = make_table(mCombination);
+            auto otherTable = make_table(combination);
+
+            std::size_t count = 0;
+
+            for (auto idx = 0; idx < table.size(); ++idx)
+                if (table[idx] && otherTable[idx])
+                    ++count;
+
+            return N - I == count;
         }
     
         friend std::ostream& operator<<(std::ostream& os, Constraint const& constraint) {

@@ -10,15 +10,11 @@ The program aims to solve a common variant of CSP colloquially known as "Crack t
 You are only required to modify the following 2 sections in `src/main.cpp`:
 
 ```cpp
-// Line 547
-
 /* Modify this section for length (the number of digits) */
 static constexpr std::size_t N = 3;
 ```
 
 ```cpp
-// Line 555
-
     constexpr auto solution = ext::CreateSolution<char, N> (
         /* Modify this section for constraints */
         /* Constraint<I, Cond> {{ "Comb" }} means that for combination Comb, I digit(s) are Cond */
@@ -41,8 +37,7 @@ With 5 constraints:
 (3) 206: 2 digits are correct but incorrectly placed.
 (4) 738: 3 digits are incorrect (value-wise and position-wise).
 (5) 780: 1 digit is correct but incorrectly placed.
-Found 8 matching combinations:
-042 442 552 655 677 699 862 992 
+Found 1 matching combinations:
+042 
 (generated within compile-time, printed in 3724ms)
 ```
-(Note that the correct result is `042`; the program is still incomplete)
