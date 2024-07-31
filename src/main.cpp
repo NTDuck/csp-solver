@@ -1,10 +1,31 @@
+#ifndef CSP_SOLVER_CPP
+#define CSP_SOLVER_CPP
+
+
+#define CSP_REQUIRES_EXACT_DIGIT_COUNT          true
+
+#define CSP_COMBINATION_LENGTH                  3
+#define CSP_COMBINATION_DIGIT_TYPE              char
+#define CSP_NULL_DIGIT                          std::size_t(-1)
+#define CSP_CONSTRAINT(Val, Pos, Num)           ext::Constraint<Val, Pos, CSP_COMBINATION_LENGTH, CSP_COMBINATION_DIGIT_TYPE> {{ #Num }}
+
+#define CSP_CONSTRAINTS                         \
+    CSP_CONSTRAINT(1, 1, 682),                  \
+    CSP_CONSTRAINT(1, 0, 614),                  \
+    CSP_CONSTRAINT(2, 0, 206),                  \
+    CSP_CONSTRAINT(0, CSP_NULL_DIGIT, 738),     \
+    CSP_CONSTRAINT(1, 0, 780)
+
+
 #include <cstdint>
 
 #include <algorithm>
 #include <chrono>
 #include <iostream>
 
+#include <tuple>
 #include <string_view>
+
 #include <array>
 
 
@@ -209,9 +230,29 @@ namespace ext::details {
 
 
 namespace ext {
-    template <typename T, std::size_t N>
+    template <std::size_t N, typename T>
     class Combination {
         std::array<T, N> mDigits;
+
+        static constexpr auto makeTable(Combination const& combination) {
+            auto table = details::make_array<bool, 10>{}(false);
+
+            for (auto const digit : combination)
+                table[digit - '0'] = true;
+            
+            return table;
+        };
+
+        // static constexpr auto makeBigTable(Combination const& combination) {
+        //     auto table = details::make_array<std::array<bool, 10>
+        // }
+
+        template <typename... Tables>
+        static constexpr bool predTable(std::tuple<Tables...> const& tables, std::size_t idx) {
+            return std::apply([idx](Tables const&... tables_) {
+                return ((tables_[idx] && ...));
+            }, tables);
+        }
 
     public:
         using value_type = typename std::array<T, N>::value_type;
@@ -380,138 +421,63 @@ namespace ext {
 
             return true;
         }
+
+        /**
+         * @note Time complexity: `O(N * sizeof...(Combinations))`
+         * @note Auxiliary space: `O(N * sizeof...(Combinations))`
+         */
+        template <typename... Combinations>
+        static constexpr std::size_t getCorrectValCount(Combinations const&... combinations) {
+            static_assert(sizeof...(Combinations) > 0);
+
+            auto tables = std::make_tuple(makeTable(combinations)...);
+            std::size_t count{};
+
+            for (std::size_t idx{}; idx < 10; ++idx)
+                if (predTable(tables, idx))
+                    ++count;
+
+            return count;
+        }
+
+        /**
+         * @note Time complexity: `O(N * sizeof...(Combinations))`
+         * @note Auxiliary space: `O(1)`
+         */
+        template <typename... Combinations>
+        static constexpr std::size_t getCorrectPosCount(Combinations const&... combinations) {
+            std::size_t count{};
+
+            for (std::size_t idx{}; idx < N; ++idx)
+                if ((combinations[idx] && ...))
+                    ++count;
+
+            return count;
+        }
     };
 
-    enum class MatchCondition : std::uint8_t {
-        kCorrectValCorrectPos,
-        kCorrectValWrongPos,
-        kWrongValWrongPos,
-    };
-
-    template <std::size_t I, MatchCondition Cond, typename T, std::size_t N>
+    template <std::size_t I, std::size_t J, std::size_t N, typename T>
     class Constraint {
-        Combination<T, N> mCombination;
+        Combination<N, T> mCombination;
 
     public:
-        constexpr Constraint(Combination<T, N> const& combination)
+        constexpr Constraint(Combination<N, T> const& combination)
             : mCombination(combination) {
-            static_assert(I <= N);
+            // static_assert(J <= I);
+            // static_assert(I <= N);
         }
 
-        /**
-         * @note Time complexity: `O(N)`
-         * @note Auxiliary space: `O(1)`
-         */
-        template <MatchCondition Cond_ = Cond>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValCorrectPos, bool> Match(Combination<T, N> const& combination) const noexcept {
-            std::size_t count = 0;
-
-            for (auto it = mCombination.cbegin(), otherIt = combination.cbegin(); it != mCombination.cend() && otherIt != combination.cend(); ++it, ++otherIt)
-                if (*it == *otherIt)
-                    ++count;
-
-            return count == I;
-        }
-
-        /**
-         * @note Time complexity: `O(N)`
-         * @note Auxiliary space: `O(N)`
-         */
-        template <MatchCondition Cond_ = Cond>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kCorrectValWrongPos, bool> Match(Combination<T, N> const& combination) const {
-            auto make_table = [](Combination<T, N> const& combination) {
-                std::array<std::array<bool, N + 1>, 10> table{}; /* index N indicates whether combination has digit */
-
-                for (auto& arr : table)
-                    for (auto& elem : arr)
-                        elem = false;
-                
-                for (auto pos = 0; pos < combination.size(); ++pos)
-                    table[combination[pos] - '0'][pos] = table[combination[pos] - '0'][N] = true;
-
-                return table;
-            };
-
-            auto table = make_table(mCombination);
-            auto otherTable = make_table(combination);
-
-            std::size_t count = 0;
-            std::size_t internalCount{};
-
-            for (auto idx = 0; idx < table.size(); ++idx) {
-                if (!table[idx][N] || !otherTable[idx][N])
-                    continue;
-
-                internalCount = 0;
-
-                for (auto pos = 0; pos < N; ++pos)
-                    if (table[idx][pos] != otherTable[idx][pos])
-                        ++internalCount;
-
-                count += internalCount >> 1;
-            }
-
-            return count == I;
-        }
-
-        /**
-         * @note Time complexity: `O(N)`
-         * @note Auxiliary space: `O(1)`
-         */
-        template <MatchCondition Cond_ = Cond>
-        constexpr std::enable_if_t<Cond_ == MatchCondition::kWrongValWrongPos, bool> Match(Combination<T, N> const& combination) const noexcept {
-            auto make_table = [](Combination<T, N> const& combination) {
-                std::array<bool, 10> table{};
-
-                for (auto& elem : table)
-                    elem = false;
-
-                for (auto const digit : combination)
-                    table[digit - '0'] = true;
-
-                return table;
-            };
-
-            auto table = make_table(mCombination);
-            auto otherTable = make_table(combination);
-
-            std::size_t count = 0;
-
-            for (auto idx = 0; idx < table.size(); ++idx)
-                if (table[idx] && otherTable[idx])
-                    ++count;
-
-            return N - I == count;
+        constexpr Match(Combination<N, T> const& combination) const {
+            return (I == -1 || I == Combination<N, T>::getCorrectValCount(mCombination, combination))
+                && (J == -1 || J == Combination<N, T>::getCorrectPosCount(mCombination, combination));
         }
     
         friend std::ostream& operator<<(std::ostream& os, Constraint const& constraint) {
-            auto stringifyMatchCondition = [&]() -> std::string_view {
-                switch (Cond) {
-                    case MatchCondition::kCorrectValCorrectPos:
-                        return I > 1
-                            ? "digits are correct and correctly placed"
-                            : "digit is correct and correctly placed";
-
-                    case MatchCondition::kCorrectValWrongPos:
-                        return I > 1
-                            ? "digits are correct but incorrectly placed"
-                            : "digit is correct but incorrectly placed";
-
-                    case MatchCondition::kWrongValWrongPos:
-                        return I > 1
-                            ? "digits are incorrect (value-wise and position-wise)"
-                            : "digit is incorrect (value-wise and position-wise)";
-
-                    default:
-                        return {};
-                }
-            };
-
-            return os << constraint.mCombination << ": " << I << ' ' << stringifyMatchCondition() << '.';
+            return os << constraint.mCombination << ": " << I << " is correct, and " << J << " is correctly placed" << '.';
         }
     };
 
-    template <typename T, std::size_t N, typename... Constraints>
+    template <std::size_t N, typename T, typename... Constraints>
     class Solution {
         std::tuple<Constraints...> mConstraints;
 
@@ -531,9 +497,9 @@ namespace ext {
             : mConstraints(std::forward<Constraints>(constraints)...) {}
 
         constexpr auto Generate() const {
-            details::static_vector<Combination<T, N>, details::pow(std::size_t(10), N)> result{};
+            details::static_vector<Combination<N, T>, details::pow(std::size_t(10), N)> result{};
 
-            for (Combination<T, N> combination { '0' }; combination != Combination<T, N> { '9' }; ++combination)
+            for (Combination<N, T> combination { '0' }; combination != Combination<N, T> { '9' }; ++combination)
                 if (std::apply([combination](Constraints const&... constraints) {
                     return ((constraints.Match(combination) && ...));
                 }, mConstraints))
@@ -542,7 +508,7 @@ namespace ext {
             return result;
         }
 
-        void Print(details::static_vector<Combination<T, N>, details::pow(std::size_t(10), N)> combinations, std::ostream& os = std::cout, std::string_view delimiter = " ") const {
+        void Print(details::static_vector<Combination<N, T>, details::pow(std::size_t(10), N)> combinations, std::ostream& os = std::cout, std::string_view delimiter = " ") const {
             getDeltaTime();
 
             os << "With " << sizeof...(Constraints) << (sizeof...(Constraints) > 1 ? " constraints" : " constraint") << ":" << std::endl;
@@ -561,33 +527,21 @@ namespace ext {
         }
     };
 
-    template <typename T, std::size_t N, typename... Constraints>
+    template <std::size_t N, typename T, typename... Constraints>
     static constexpr auto CreateSolution(Constraints&&... constraints) {
-        return Solution<T, N, Constraints...>(std::forward<Constraints>(constraints)...);
+        return Solution<N, T, Constraints...>(std::forward<Constraints>(constraints)...);
     }
+
 }
 
 
-/* Modify this section for length (the number of digits) */
-static constexpr std::size_t N = 3;
-
-template <std::size_t I, ext::MatchCondition Cond>
-using Constraint = ext::Constraint<I, Cond, char, N>;
-
-
 int main(void) {
-    constexpr auto solution = ext::CreateSolution<char, N> (
-        /* Modify this section for constraints */
-        /* `Constraint<I, Cond> {{ "Comb" }}` means for combination `Comb`, `I` digit(s) are `Cond` */
-        /* For example, the first constraint (described by the one right below) means for combination "682", 1 digit is correct and correctly placed */
-        Constraint<1, ext::MatchCondition::kCorrectValCorrectPos> {{ "682" }},
-        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "614" }},
-        Constraint<2, ext::MatchCondition::kCorrectValWrongPos> {{ "206" }},
-        Constraint<3, ext::MatchCondition::kWrongValWrongPos> {{ "738" }},
-        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "780" }}
-    );
+    constexpr auto solution = ext::CreateSolution<CSP_COMBINATION_LENGTH, CSP_COMBINATION_DIGIT_TYPE> (CSP_CONSTRAINTS);
 
     /* Ignore intellisense's "expression not folded to a constant due to excessive constexpr function call complexity" */
     constexpr auto generation = solution.Generate();
     solution.Print(generation);
 }
+
+
+#endif   // CSP_SOLVER_CPP
