@@ -2,19 +2,56 @@
 #define CSP_SOLVER_CPP
 
 
-#define CSP_REQUIRES_EXACT_DIGIT_COUNT          true
+/* Configure input parameters and configurations
+by modifying the macros below */
+/*  */
 
-#define CSP_COMBINATION_LENGTH                  3
-#define CSP_COMBINATION_DIGIT_TYPE              char
-#define CSP_NULL_DIGIT                          std::size_t(-1)
-#define CSP_CONSTRAINT(Val, Pos, Num)           ext::Constraint<Val, Pos, CSP_COMBINATION_LENGTH, CSP_COMBINATION_DIGIT_TYPE> {{ #Num }}
+// Enables strict checking of exact digit counts
+#define CSP_REQUIRES_EXACT_DIGIT_COUNT      false
 
-#define CSP_CONSTRAINTS                         \
-    CSP_CONSTRAINT(1, 1, 682),                  \
-    CSP_CONSTRAINT(1, 0, 614),                  \
-    CSP_CONSTRAINT(2, 0, 206),                  \
-    CSP_CONSTRAINT(0, CSP_NULL_DIGIT, 738),     \
-    CSP_CONSTRAINT(1, 0, 780)
+// The number of digits in a Combination
+#define CSP_COMBINATION_LENGTH              3
+
+// The type used for each digit in the Combination
+#define CSP_COMBINATION_DIGIT_TYPE          char
+
+// Used to "skip" a clause in a Constraint
+#define CSP_NULL                            std::size_t(-1)
+
+// Represent a constraint: for a given Combination `Num`,
+// a matching Combination to this Constraint
+// should have exactly `ValCount` correct digits
+// and `PosCount` correctly placed digits
+#define CSP_CONSTRAINT(Num, ValCount, PosCount)                                \
+    ext::Constraint<ValCount, PosCount, CSP_COMBINATION_LENGTH, CSP_COMBINATION_DIGIT_TYPE> {{ #Num }}
+
+// Represent a Constraint with given Combination `Num`
+// where `Count` digits are correct and correctly placed
+#define CSP_CONSTRAINT_CORRECT_AND_CORRECTLY_PLACED(Num, Count)                \
+    CSP_CONSTRAINT(Num, Count, Count)
+
+// Represent a Constraint with given Combination `Num`
+// where `Count` digits are correct but incorrectly placed
+#define CSP_CONSTRAINT_CORRECT_BUT_INCORRECTLY_PLACED(Num, Count)              \
+    CSP_CONSTRAINT(Num, Count, 0)
+
+// Represent a Constraint with given Combination `Num`
+// where `Count` digits are incorrect
+#define CSP_CONSTRAINT_INCORRECT(Num, Count)                                   \
+    CSP_CONSTRAINT(Num, CSP_COMBINATION_LENGTH - Count, CSP_NULL)
+
+// Represent a Constraint with given Combination `Num`
+// where all digits are incorrect
+#define CSP_CONSTRAINT_ALL_INCORRECT(Num)                                      \
+    CSP_CONSTRAINT_INCORRECT(Num, CSP_COMBINATION_LENGTH)
+
+// A problem is defined by one or more constraints
+#define CSP_CONSTRAINTS                                                        \
+    CSP_CONSTRAINT_CORRECT_AND_CORRECTLY_PLACED(682, 1)                       ,\
+    CSP_CONSTRAINT_CORRECT_BUT_INCORRECTLY_PLACED(614, 1)                     ,\
+    CSP_CONSTRAINT_CORRECT_BUT_INCORRECTLY_PLACED(206, 2)                     ,\
+    CSP_CONSTRAINT_ALL_INCORRECT(738)                                         ,\
+    CSP_CONSTRAINT_CORRECT_BUT_INCORRECTLY_PLACED(780, 1)
 
 
 #include <cstdint>
@@ -234,7 +271,7 @@ namespace ext {
     class Combination {
         std::array<T, N> mDigits;
 
-        static constexpr auto makeTable(Combination const& combination) {
+        static constexpr auto toValTable(Combination const& combination) {
             auto table = details::make_array<bool, 10>{}(false);
 
             for (auto const digit : combination)
@@ -243,14 +280,26 @@ namespace ext {
             return table;
         };
 
-        // static constexpr auto makeBigTable(Combination const& combination) {
-        //     auto table = details::make_array<std::array<bool, 10>
-        // }
+        static constexpr auto toPosTable(Combination const& combination) {
+            auto table = details::make_array<std::array<bool, N + 1>, 10>{}(details::make_array<bool, N + 1>{}(false));
+
+            for (std::size_t pos{}; pos < N; ++pos)
+                table[combination[pos] - '0'][pos] = table[combination[pos] - '0'][N] = true;
+
+            return table;
+        }
 
         template <typename... Tables>
-        static constexpr bool predTable(std::tuple<Tables...> const& tables, std::size_t idx) {
+        static constexpr bool isAllTrue(std::tuple<Tables...> const& tables, std::size_t idx) {
             return std::apply([idx](Tables const&... tables_) {
                 return ((tables_[idx] && ...));
+            }, tables);
+        }
+
+        template <typename... Tables>
+        static constexpr bool isAllTrue(std::tuple<Tables...> const& tables, std::size_t idx, std::size_t pos) {
+            return std::apply([idx, pos](Tables const&... tables_) {
+                return ((tables_[idx][pos] && ...));
             }, tables);
         }
 
@@ -380,8 +429,8 @@ namespace ext {
         }
 
         constexpr bool operator==(Combination const& other) {
-            for (auto it = cbegin(), otherIt = other.cbegin(); it != cend() && otherIt != other.cend(); ++it, ++otherIt)
-                if (*it != *otherIt)
+            for (std::size_t pos{}; pos < N; ++pos)
+                if (operator[](pos) != other[pos])
                     return false;
         
             return true;
@@ -430,11 +479,11 @@ namespace ext {
         static constexpr std::size_t getCorrectValCount(Combinations const&... combinations) {
             static_assert(sizeof...(Combinations) > 0);
 
-            auto tables = std::make_tuple(makeTable(combinations)...);
+            auto tables = std::make_tuple(toValTable(combinations)...);
             std::size_t count{};
 
             for (std::size_t idx{}; idx < 10; ++idx)
-                if (predTable(tables, idx))
+                if (isAllTrue(tables, idx))
                     ++count;
 
             return count;
@@ -442,15 +491,24 @@ namespace ext {
 
         /**
          * @note Time complexity: `O(N * sizeof...(Combinations))`
-         * @note Auxiliary space: `O(1)`
+         * @note Auxiliary space: `O(N * sizeof...(Combinations))`
          */
         template <typename... Combinations>
         static constexpr std::size_t getCorrectPosCount(Combinations const&... combinations) {
+            static_assert(sizeof...(Combinations) > 0);
+
+            auto tables = std::make_tuple(toPosTable(combinations)...);
+
             std::size_t count{};
 
-            for (std::size_t idx{}; idx < N; ++idx)
-                if ((combinations[idx] && ...))
-                    ++count;
+            for (auto idx = 0; idx < 10; ++idx) {
+                if (!isAllTrue(tables, idx, N))
+                    continue;
+
+                for (auto pos = 0; pos < N; ++pos)
+                    if (isAllTrue(tables, idx, pos))
+                        ++count;
+            }
 
             return count;
         }
@@ -468,12 +526,12 @@ namespace ext {
         }
 
         constexpr Match(Combination<N, T> const& combination) const {
-            return (I == -1 || I == Combination<N, T>::getCorrectValCount(mCombination, combination))
-                && (J == -1 || J == Combination<N, T>::getCorrectPosCount(mCombination, combination));
+            return (I == CSP_NULL || I == Combination<N, T>::getCorrectValCount(mCombination, combination))
+                && (J == CSP_NULL || J == Combination<N, T>::getCorrectPosCount(mCombination, combination));
         }
     
         friend std::ostream& operator<<(std::ostream& os, Constraint const& constraint) {
-            return os << constraint.mCombination << ": " << I << " is correct, and " << J << " is correctly placed" << '.';
+            return os << constraint.mCombination << " has " << I << " correct digit(s), " << J << " of which correctly placed" << '.';
         }
     };
 
@@ -508,7 +566,7 @@ namespace ext {
             return result;
         }
 
-        void Print(details::static_vector<Combination<N, T>, details::pow(std::size_t(10), N)> combinations, std::ostream& os = std::cout, std::string_view delimiter = " ") const {
+        void Print(details::static_vector<Combination<N, T>, details::pow(std::size_t(10), N)> combinations, std::ostream& os = std::cout) const {
             getDeltaTime();
 
             os << "With " << sizeof...(Constraints) << (sizeof...(Constraints) > 1 ? " constraints" : " constraint") << ":" << std::endl;
@@ -519,7 +577,7 @@ namespace ext {
             
             os << "Found " << combinations.size() << " matching combinations:" << std::endl;
             for (auto combination : combinations)
-                os << combination << delimiter;
+                os << combination << ' ';
             os << std::endl;
 
             auto dt = getDeltaTime();
@@ -536,12 +594,28 @@ namespace ext {
 
 
 int main(void) {
+    std::ios_base::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
+    #ifdef CSP_CONSTRAINTS
     constexpr auto solution = ext::CreateSolution<CSP_COMBINATION_LENGTH, CSP_COMBINATION_DIGIT_TYPE> (CSP_CONSTRAINTS);
 
-    /* Ignore intellisense's "expression not folded to a constant due to excessive constexpr function call complexity" */
+    // Ignore intellisense's "expression not folded to a constant due to excessive constexpr function call complexity"
+    // constexpr can only mean good :3
     constexpr auto generation = solution.Generate();
     solution.Print(generation);
+
+    #else
+    std::cerr << "Error: macro CSP_CONSTRAINTS is not defined" << std::endl;
+    #endif
 }
 
+
+#undef CSP_REQUIRES_EXACT_DIGIT_COUNT
+#undef CSP_COMBINATION_LENGTH
+#undef CSP_COMBINATION_DIGIT_TYPE
+#undef CSP_NULL
+#undef CSP_CONSTRAINT
+#undef CSP_CONSTRAINTS
 
 #endif   // CSP_SOLVER_CPP

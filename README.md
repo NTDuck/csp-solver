@@ -7,37 +7,20 @@ The program aims to solve a common variant of CSP colloquially known as "Crack t
 ![](example.jpg)
 
 ## Usage
-You are only required to modify the following 2 sections in `src/main.cpp`:
-
-```cpp
-/* Modify this section for length (the number of digits) */
-static constexpr std::size_t N = 3;
-```
-
-```cpp
-    constexpr auto solution = ext::CreateSolution<char, N> (
-        /* Modify this section for constraints */
-        /* Constraint<I, Cond> {{ "Comb" }} means that for combination Comb, I digit(s) are Cond */
-        /* For example, the first constraint (described by the one right below) means for combination "682", 1 digit is correct and correctly placed */
-        Constraint<1, ext::MatchCondition::kCorrectValCorrectPos> {{ "682" }},
-        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "614" }},
-        Constraint<2, ext::MatchCondition::kCorrectValWrongPos> {{ "206" }},
-        Constraint<3, ext::MatchCondition::kWrongValWrongPos> {{ "738" }},
-        Constraint<1, ext::MatchCondition::kCorrectValWrongPos> {{ "780" }}
-    );
-```
+Typically, user input or configurations are provided via keyboard, command line arguments, or a configuration file. In this project, everything is done at compile-time (except, of course, outputing to the stream buffer), so you'll need to use macros instead. For detailed instructions, please refer to [src/main.cpp](src/main.cpp).
 
 ## Build and run
 ```sh
 $ g++ -std=c++17 src/main.cpp -o csp
 $ ./csp.exe
 With 5 constraints:
-(1) 682: 1 digit is correct and correctly placed.
-(2) 614: 1 digit is correct but incorrectly placed.
-(3) 206: 2 digits are correct but incorrectly placed.
-(4) 738: 3 digits are incorrect (value-wise and position-wise).
-(5) 780: 1 digit is correct but incorrectly placed.
+(1) 682 has 1 correct digit(s), 1 of which correctly placed.
+(2) 614 has 1 correct digit(s), 0 of which correctly placed.
+(3) 206 has 2 correct digit(s), 0 of which correctly placed.
+(4) 738 has 0 correct digit(s), 18446744073709551615 of which correctly placed.
+(5) 780 has 1 correct digit(s), 0 of which correctly placed.
 Found 1 matching combinations:
 042 
-(generated within compile-time, printed in 3724ms)
+(generated within compile-time, printed in 723ms)
 ```
+(ignore the `18446744073709551615`; it stands for `std::size_t(-1)`, which means that the corresponding part of the Constraint is skipped)
